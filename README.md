@@ -1,43 +1,3 @@
-# Big-Data
-
-根据题目中的六项任务、评分权重和提交要求，建议采用“按流水线模块分工”，这样代码边界清晰、三个人可以并行开发。依据《实践题目》中的完整要求制定：:codex-file-citation{path="F:/OneDrive/课程/大数据综合实践/实践题目.docx" purpose="source"}
-
-| 组员                | 负责内容                                                     | 主要文件                                                     | 验收标准                                                     |
-| ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| 组员A：数据与分段   | 数据集预处理；部署IoTDB；批量导入与查询；实现两种自动分段方法；分段参数调优与对比 | `data_loader.py`、`segmentation.py`                          | IoTDB可正常查询；输出统一DataFrame；至少两种分段算法；包含最小长度约束及参数选择依据 |
-| 组员B：特征与聚类   | 分段特征提取及标准化；实现两种聚类算法；选择最优聚类数；生成工况ID和持续时间统计 | `feature_extraction.py`、`clustering.py`                     | 至少覆盖4类特征；至少两种聚类算法；输出Silhouette/CH等指标；生成`OP_001`形式标签 |
-| 组员C：可视化与整合 | 完成四类规定图表；编排完整流水线；整理依赖和运行说明；汇总实验报告；组织验收演示 | `visualization.py`、`main.py`、`requirements.txt`、`README.md`、实验报告 | 四类图表齐全；项目可一键运行；报告8～15页；完成端到端演示    |
-
-其中，组员A负责题目权重30%，组员B负责45%，组员C显性任务为25%，但组员C还承担项目整合、报告排版、运行复现和演示准备，因此实际工作量基本平衡。
-
-### 必须提前统一的接口
-
-为了避免最后无法合并，第一天就固定下面四种数据格式：
-
-1. `raw_df`：时间为索引，每个传感器一个列。
-2. `segments`：包含`segment_id、start_idx、end_idx、start_time、end_time`。
-3. `features`：每行对应一个分段，并保留`segment_id`。
-4. `labels`：包含`segment_id、cluster、operation_id、duration`。
-
-建议默认选择ETT数据集：CSV格式、7维、连续时间较长，下载和导入IoTDB都比较方便。
-
-### 报告分工
-
-- 组员A撰写：数据集、预处理、IoTDB、分段算法和参数调优。
-- 组员B撰写：特征设计、标准化、聚类算法和评价指标对比。
-- 组员C撰写：可视化分析、问题与解决方案、结论，并负责最终合并和排版。
-- 每个人提交自己部分的实验参数、结果表格和图，不能只交文字给组员C。
-
-### 推荐进度
-
-- 第1天：共同确定数据集、IoTDB路径和接口格式。
-- 第2～3天：三人使用模拟输入并行开发各自模块。
-- 第4天：首次合并，跑通`main.py`完整流程。
-- 第5天：参数调优、算法对比、生成最终图表。
-- 第6天：完成报告、README和演示彩排。
-
-验收演示时，组员A讲数据接入与分段，组员B讲特征与聚类，组员C讲可视化、整体流程和结论。这样每个人都有明确可展示的贡献。
-
 # WeatherDataset 高维时间序列自动分段实验
 
 本项目使用 Apache IoTDB 和 Python 对 WeatherDataset 气象多变量时间序列进行存储、预处理和自动分段，并比较两种高维时间序列变点检测方法：
@@ -51,7 +11,8 @@
 
 实验使用 WeatherDataset，主要特点如下：
 
-- 52,696 个时间点；
+- 原始 CSV 共 52,696 行，其中包含1个重复时间戳；
+- 按统一规则去重后得到 52,695 个唯一时间点；
 - 每 10 分钟采样一次；
 - 时间范围约为 2020-01-01 至 2021-01-01；
 - 21 个气象变量，例如温度、湿度、气压和风速等；
@@ -102,14 +63,22 @@
 
 ## 4. 数据预处理
 
-`segmentation.py` 会自动执行以下处理：
+`segmentation.py` 默认先按指定时间范围从 IoTDB 查询数据，并通过官方
+`SessionDataSet.todf()` 方法转换成 `pandas.DataFrame`，然后自动执行以下处理：
 
-1. 将 CSV 第一列识别为时间列；
-2. 将其余列转换为数值；
-3. 将小于等于 `-9990` 的哨兵值视为缺失值；
-4. 使用线性插值填补缺失值；
-5. 按时间从早到晚排序；
-6. 对每个气象维度分别进行 Z-score 标准化。
+`import_weather.py` 和 `segmentation.py` 使用完全相同的预处理顺序：
+
+1. 识别并解析时间列；
+2. 将气象变量转换为数值；
+3. 使用稳定排序按时间从早到晚排列；
+4. 删除重复时间戳，并统一保留重复记录中的最后一条；
+5. 将小于等于 `-9990` 的81个哨兵值转换为缺失值；
+6. 使用线性插值填补缺失值；
+7. 检查时间戳唯一性、时间顺序、哨兵值和缺失值；
+8. 在分段前对每个气象维度分别进行 Z-score 标准化。
+
+经过处理后，CSV 模式和 IoTDB 模式都使用同一条包含52,695个时间点的
+时间轴，保证分段下标与数据库查询结果严格对应。
 
 标准化是必要的，因为温度、气压、湿度和风速等变量的单位及数值范围不同。如果直接计算距离，数值较大的变量会对结果产生不合理的主导作用。
 
@@ -199,32 +168,48 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 7.2 安装分段程序依赖
+### 7.2 安装程序依赖
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install numpy pandas scipy scikit-learn ruptures
-```
-
-如果需要执行 IoTDB 导入程序，还需要安装：
-
-```bash
-python -m pip install apache-iotdb
+python -m pip install numpy pandas scipy scikit-learn ruptures apache-iotdb
 ```
 
 ## 8. 快速使用最终分段程序
 
-确认目录中存在：
+首先确认 IoTDB 已启动，并使用当前版本的导入脚本重新导入数据：
 
-```text
-data/weather.csv
-segmentation.py
+```bash
+python import_weather.py
 ```
 
-然后在项目根目录运行：
+修正后的导入程序会在写入前处理重复时间戳和 `-9999` 哨兵值。它会使用
+清洗后的数值覆盖相同时间戳上的旧值，因此通常不需要删除原数据库。
+
+导入后的信息为：
+
+```text
+设备路径：root.weather.station001
+默认地址：127.0.0.1:6667
+```
+
+然后在项目根目录运行。程序默认查询
+`2020-01-01 00:10:00` 至 `2021-01-01 00:00:00`：
 
 ```bash
 python segmentation.py
+```
+
+也可以自定义查询时间范围：
+
+```bash
+python segmentation.py --start "2020-03-01 00:00:00" --end "2020-06-01 00:00:00"
+```
+
+自定义 IoTDB 连接信息和设备路径：
+
+```bash
+python segmentation.py --host 127.0.0.1 --port 6667 --user root --password root --device root.weather.station001
 ```
 
 程序运行结束后，只会在当前文件夹生成两个结果文件：
@@ -234,33 +219,33 @@ pelt_segments.csv
 kl_segments.csv
 ```
 
-如果数据不在默认位置，可以使用 `--input` 指定路径：
+如果暂时没有启动 IoTDB，可以使用 CSV 备用模式：
 
 ```bash
-python segmentation.py --input "你的路径/weather.csv"
+python segmentation.py --source csv --input "你的路径/weather.csv"
 ```
 
 例如 Windows：
 
 ```powershell
-python .\segmentation.py --input ".\data\weather.csv"
+python .\segmentation.py --source csv --input ".\data\weather.csv"
 ```
 
 ## 9. 输出分段表说明
 
 `pelt_segments.csv` 和 `kl_segments.csv` 的字段相同：
 
-| 字段                  | 含义                       |
-| --------------------- | -------------------------- |
-| `method`              | 分段方法名称               |
-| `segment_number`      | 分段编号，从1开始          |
-| `start_index`         | 分段起始下标               |
+| 字段 | 含义 |
+| --- | --- |
+| `method` | 分段方法名称 |
+| `segment_number` | 分段编号，从1开始 |
+| `start_index` | 分段起始下标 |
 | `end_index_exclusive` | 分段结束下标，不包含该位置 |
-| `end_index_inclusive` | 分段内最后一个数据点下标   |
-| `start_time`          | 分段起始时间               |
-| `end_time`            | 分段结束时间               |
-| `length_samples`      | 分段包含的采样点数量       |
-| `length_hours`        | 分段持续时间，单位为小时   |
+| `end_index_inclusive` | 分段内最后一个数据点下标 |
+| `start_time` | 分段起始时间 |
+| `end_time` | 分段结束时间 |
+| `length_samples` | 分段包含的采样点数量 |
+| `length_hours` | 分段持续时间，单位为小时 |
 
 本项目主要采用 Python 常用的左闭右开边界形式：
 
@@ -279,7 +264,9 @@ end_index_exclusive = 144
 
 ## 10. 将数据导入 Apache IoTDB
 
-这一步用于复现实验中的数据库存储部分，不是运行最终 `segmentation.py` 的必要条件。最终分段程序直接读取 CSV，因此没有安装 IoTDB 的同学也可以运行。
+这一步用于复现实验中的数据库存储和查询过程。最终 `segmentation.py` 默认从
+IoTDB 查询并返回 `pandas.DataFrame`；没有安装 IoTDB 的同学仍可使用
+`--source csv` 备用模式运行。
 
 首先确保 IoTDB 服务已经启动，并确认默认连接信息：
 
@@ -345,7 +332,7 @@ PELT 参数实验主要包括：
 确认运行命令时所在目录是项目根目录，或者使用：
 
 ```bash
-python segmentation.py --input "weather.csv 的实际路径"
+python segmentation.py --source csv --input "weather.csv 的实际路径"
 ```
 
 ### 出现 `ModuleNotFoundError`
@@ -353,7 +340,7 @@ python segmentation.py --input "weather.csv 的实际路径"
 重新安装依赖：
 
 ```bash
-python -m pip install numpy pandas scipy scikit-learn ruptures
+python -m pip install numpy pandas scipy scikit-learn ruptures apache-iotdb
 ```
 
 ### Windows PowerShell 无法激活虚拟环境
@@ -370,9 +357,21 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 .\.venv\Scripts\Activate.ps1
 ```
 
+### 行数不是 52,695
+
+请检查终端输出。标准数据应满足：
+
+```text
+Rows: 52,695
+Remaining duplicate/sentinel/missing values: 0
+```
+
+如果 IoTDB 返回的行数不同，请重新运行修正后的 `import_weather.py`，并确认
+导入和查询使用的设备路径都是 `root.weather.station001`。
+
 ### 运行时间较长
 
-PELT 需要处理52,696行、21维数据。最终脚本已经使用 `jump=6` 降低计算量，请等待程序输出结果，不建议直接结束进程。
+PELT 需要处理52,695行、21维数据。最终脚本已经使用 `jump=6` 降低计算量，请等待程序输出结果，不建议直接结束进程。
 
 ### 结果数量与本文略有不同
 
@@ -386,4 +385,3 @@ PELT 需要处理52,696行、21维数据。最终脚本已经使用 `jump=6` 降
 ## 13. 说明
 
 本项目用于高维时间序列存储、变点检测与自动分段实验。两种方法产生的分段结果可继续用于分段特征提取、聚类、工况识别和可视化分析。
-

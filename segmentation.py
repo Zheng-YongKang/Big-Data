@@ -1,4 +1,8 @@
-"""WeatherDataset 最终分段：运行后仅在当前文件夹生成两个分段表。"""
+"""从 IoTDB 查询 WeatherDataset，再使用两种方法完成最终分段。
+
+默认数据流：IoTDB 时间范围查询 -> pandas.DataFrame -> 预处理 -> 分段。
+运行后仅在当前文件夹生成 pelt_segments.csv 和 kl_segments.csv。
+"""
 
 import argparse
 import math
@@ -34,34 +38,146 @@ def parse_arguments():
         description="使用 PELT 和滑动窗口对称 KL 对 WeatherDataset 分段"
     )
     parser.add_argument(
+        "--source",
+        choices=["iotdb", "csv"],
+        default="iotdb",
+        help="数据来源，默认：iotdb；可选备用方式：csv",
+    )
+    parser.add_argument(
         "--input",
         type=Path,
         default=Path("data/weather.csv"),
-        help="输入 CSV，默认：data/weather.csv",
+        help="source=csv 时的输入文件，默认：data/weather.csv",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="IoTDB 地址")
+    parser.add_argument("--port", default="6667", help="IoTDB RPC 端口")
+    parser.add_argument("--user", default="root", help="IoTDB 用户名")
+    parser.add_argument("--password", default="root", help="IoTDB 密码")
+    parser.add_argument(
+        "--device",
+        default="root.weather.station001",
+        help="IoTDB 设备路径",
+    )
+    parser.add_argument(
+        "--start",
+        default="2020-01-01 00:10:00",
+        help="查询开始时间（包含）",
+    )
+    parser.add_argument(
+        "--end",
+        default="2021-01-01 00:00:00",
+        help="查询结束时间（包含）",
     )
     return parser.parse_args()
 
 
-def load_data(csv_path):
-    """读取 CSV，处理缺失值，并对各个数值维度进行标准化。"""
+def format_iotdb_time(value):
+    """检查用户输入的时间，并转换为 IoTDB SQL 使用的时间格式。"""
+    timestamp = pd.to_datetime(value, errors="raise")
+    return timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+
+
+def query_weather_from_iotdb(
+    start_time,
+    end_time,
+    host="127.0.0.1",
+    port="6667",
+    username="root",
+    password="root",
+    device="root.weather.station001",
+):
+    """按时间范围查询 IoTDB，并返回 pandas.DataFrame。
+
+    这是本实验中“从 IoTDB 查询并返回 pandas.DataFrame”的核心函数。
+    """
+    try:
+        from iotdb.Session import Session
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "未安装 IoTDB Python 客户端，请执行："
+            "python -m pip install apache-iotdb"
+        ) from error
+
+    sql_start = format_iotdb_time(start_time)
+    sql_end = format_iotdb_time(end_time)
+    if pd.Timestamp(start_time) > pd.Timestamp(end_time):
+        raise ValueError("查询开始时间不能晚于结束时间。")
+
+    sql = (
+        f"SELECT * FROM {device} "
+        f"WHERE time >= {sql_start} AND time <= {sql_end} "
+        "ORDER BY time ASC"
+    )
+    print(f"IoTDB SQL: {sql}")
+
+    session = Session(host, str(port), username, password)
+    result = None
+    try:
+        session.open(False)
+        result = session.execute_query_statement(sql)
+        # 官方客户端的 todf() 会消费查询结果并直接生成 DataFrame。
+        dataframe = result.todf()
+    finally:
+        if result is not None:
+            try:
+                result.close_operation_handle()
+            except Exception:
+                pass
+        session.close()
+
+    if dataframe.empty:
+        raise ValueError(
+            f"IoTDB 在 {start_time} 至 {end_time} 范围内没有返回数据。"
+        )
+
+    # todf() 返回的是独立的 pandas.DataFrame，可在 Session 关闭后继续使用。
+    return dataframe
+
+
+def load_csv(csv_path):
+    """备用方式：直接从 CSV 读取并返回 pandas.DataFrame。"""
     if not csv_path.exists():
         raise FileNotFoundError(
             f"找不到数据文件：{csv_path}\n"
             "请将 weather.csv 放入 data 文件夹，或使用 --input 指定路径。"
         )
 
-    df = pd.read_csv(csv_path)
-    if df.shape[1] < 2:
-        raise ValueError("CSV 至少需要一列时间和一列数值。")
+    return pd.read_csv(csv_path)
 
-    time_column = df.columns[0]
-    times = pd.to_datetime(df[time_column], errors="coerce")
+
+def preprocess_dataframe(df):
+    """按统一规则去重、处理哨兵值，并对各数值维度标准化。"""
+    if df.shape[1] < 2:
+        raise ValueError("数据至少需要一列时间和一列数值。")
+
+    # IoTDB 的 todf() 一般返回名为 Time 的时间列；否则使用第一列。
+    time_column = next(
+        (column for column in df.columns if str(column).lower() == "time"),
+        df.columns[0],
+    )
+    work = df.copy()
+    raw_time = work[time_column]
+    if pd.api.types.is_numeric_dtype(raw_time):
+        times = pd.to_datetime(raw_time, unit="ms", errors="coerce")
+    else:
+        times = pd.to_datetime(raw_time, errors="coerce")
     if times.isna().any():
         raise ValueError(f"时间列 {time_column!r} 中存在无法解析的时间。")
 
-    values = df.drop(columns=[time_column]).apply(pd.to_numeric, errors="coerce")
+    work[time_column] = times
+
+    # 与 import_weather.py 完全一致：先稳定排序，再保留重复时间戳的最后一条。
+    work = work.sort_values(time_column, kind="mergesort").reset_index(drop=True)
+    duplicate_count = int(work[time_column].duplicated().sum())
+    work = work.drop_duplicates(subset=[time_column], keep="last").reset_index(
+        drop=True
+    )
+
+    times = pd.DatetimeIndex(work[time_column])
+    values = work.drop(columns=[time_column]).apply(pd.to_numeric, errors="coerce")
     sentinel_mask = values <= -9990
-    missing_count = int(sentinel_mask.sum().sum() + values.isna().sum().sum())
+    sentinel_count = int(sentinel_mask.sum().sum())
+    missing_count = int(values.isna().sum().sum())
     values = values.mask(sentinel_mask)
     values = values.interpolate(limit_direction="both").ffill().bfill()
 
@@ -69,11 +185,22 @@ def load_data(csv_path):
         bad_columns = values.columns[values.isna().any()].tolist()
         raise ValueError(f"这些列处理后仍有缺失值：{bad_columns}")
 
-    order = np.argsort(times.to_numpy())
-    times = pd.DatetimeIndex(times.iloc[order])
-    values = values.iloc[order].reset_index(drop=True)
+    if not times.is_unique:
+        raise ValueError("预处理后仍存在重复时间戳。")
+    if not times.is_monotonic_increasing:
+        raise ValueError("预处理后的时间没有按升序排列。")
+    if (values <= -9990).any().any():
+        raise ValueError("预处理后仍存在 -9999 类哨兵值。")
+
     standardized = StandardScaler().fit_transform(values.to_numpy(dtype=float))
-    return times, standardized, values.shape[1], missing_count
+    return (
+        times,
+        standardized,
+        values.shape[1],
+        duplicate_count,
+        sentinel_count,
+        missing_count,
+    )
 
 
 def run_pelt(data):
@@ -208,11 +335,38 @@ def make_segment_table(method, change_points, times):
 
 def main():
     args = parse_arguments()
-    times, data, dimension_count, missing_count = load_data(args.input)
+
+    if args.source == "iotdb":
+        print("Querying WeatherDataset from IoTDB...")
+        dataframe = query_weather_from_iotdb(
+            start_time=args.start,
+            end_time=args.end,
+            host=args.host,
+            port=args.port,
+            username=args.user,
+            password=args.password,
+            device=args.device,
+        )
+        print(f"Returned object: pandas.DataFrame, shape={dataframe.shape}")
+    else:
+        print(f"Reading CSV fallback: {args.input}")
+        dataframe = load_csv(args.input)
+
+    (
+        times,
+        data,
+        dimension_count,
+        duplicate_count,
+        sentinel_count,
+        missing_count,
+    ) = preprocess_dataframe(dataframe)
 
     print(f"Rows: {len(data):,}")
     print(f"Dimensions: {dimension_count}")
-    print(f"Missing/sentinel values interpolated: {missing_count}")
+    print(f"Duplicate timestamps removed (keep last): {duplicate_count}")
+    print(f"Sentinel values converted to NaN: {sentinel_count}")
+    print(f"Original NaN values: {missing_count}")
+    print("Remaining duplicate/sentinel/missing values: 0")
 
     print("\nRunning PELT...")
     pelt_points, penalty, pelt_runtime = run_pelt(data)

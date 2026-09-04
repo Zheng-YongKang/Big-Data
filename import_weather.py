@@ -11,7 +11,7 @@ from iotdb.utils.IoTDBConstants import TSDataType
 
 # ==================== 配置 ====================
 
-CSV_PATH = Path(r"E:\ApacheIoTDB\data\weather.csv")
+CSV_PATH = Path("data/weather.csv")
 
 HOST = "127.0.0.1"
 PORT = 6667
@@ -23,9 +23,7 @@ DEVICE = "root.weather.station001"
 
 BATCH_SIZE = 1000
 
-MAPPING_OUTPUT = Path(
-    r"E:\ApacheIoTDB\outputs\weather_column_mapping.csv"
-)
+MAPPING_OUTPUT = Path("weather_column_mapping.csv")
 
 
 # ==================== 字段名称清理 ====================
@@ -91,7 +89,7 @@ def load_weather_data():
     if not CSV_PATH.exists():
         raise FileNotFoundError(
             f"找不到文件：{CSV_PATH}\n"
-            "请先将 weather.csv 放到 E:\\ApacheIoTDB\\data 中。"
+            "请先将 weather.csv 放到项目的 data 文件夹中。"
         )
 
     df = pd.read_csv(CSV_PATH)
@@ -184,40 +182,12 @@ def load_weather_data():
             errors="coerce"
         )
 
-    missing_before = int(
-        df[cleaned_sensor_columns]
-        .isna()
-        .sum()
-        .sum()
-    )
-
-    print(f"数值转换后的缺失值数量：{missing_before}")
-
-    if missing_before > 0:
-        print("正在使用线性插值处理缺失值……")
-
-        df[cleaned_sensor_columns] = (
-            df[cleaned_sensor_columns]
-            .interpolate(method="linear")
-            .ffill()
-            .bfill()
-        )
-
-    missing_after = int(
-        df[cleaned_sensor_columns]
-        .isna()
-        .sum()
-        .sum()
-    )
-
-    if missing_after > 0:
-        raise ValueError(
-            f"插值后仍有 {missing_after} 个缺失值，程序停止。"
-        )
-
-    # 按时间排序
+    # 统一预处理顺序：稳定排序 -> 去重（保留最后一条）
+    # -> 哨兵值转缺失值 -> 插值。
+    # mergesort 是稳定排序，可保证重复时间戳中“最后一条”的定义可复现。
     df = df.sort_values(
-        time_column
+        time_column,
+        kind="mergesort"
     ).reset_index(drop=True)
 
     duplicate_count = int(
@@ -233,6 +203,47 @@ def load_weather_data():
             subset=[time_column],
             keep="last"
         ).reset_index(drop=True)
+
+    sensor_data = df[cleaned_sensor_columns]
+    sentinel_mask = sensor_data <= -9990
+    sentinel_count = int(sentinel_mask.sum().sum())
+    original_nan_count = int(sensor_data.isna().sum().sum())
+
+    print(f"-9999类哨兵值数量：{sentinel_count}")
+    print(f"原始NaN数量：{original_nan_count}")
+
+    # -9999 不是正常气象观测值，必须在写入 IoTDB 之前转换为 NaN。
+    df[cleaned_sensor_columns] = sensor_data.mask(sentinel_mask)
+    df[cleaned_sensor_columns] = (
+        df[cleaned_sensor_columns]
+        .interpolate(method="linear", limit_direction="both")
+        .ffill()
+        .bfill()
+    )
+
+    missing_after = int(
+        df[cleaned_sensor_columns]
+        .isna()
+        .sum()
+        .sum()
+    )
+    sentinel_after = int(
+        (df[cleaned_sensor_columns] <= -9990)
+        .sum()
+        .sum()
+    )
+
+    if missing_after > 0 or sentinel_after > 0:
+        raise ValueError(
+            "预处理失败："
+            f"仍有 {missing_after} 个缺失值和 {sentinel_after} 个哨兵值。"
+        )
+    if not df[time_column].is_unique:
+        raise ValueError("预处理后仍存在重复时间戳。")
+    if not df[time_column].is_monotonic_increasing:
+        raise ValueError("预处理后的时间没有按升序排列。")
+
+    print("预处理检查通过：重复时间戳、哨兵值、缺失值均为0。")
 
     print(f"处理后数据形状：{df.shape}")
     print(f"时间范围：{df[time_column].min()} 至 {df[time_column].max()}")
