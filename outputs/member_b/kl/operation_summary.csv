@@ -1,0 +1,3 @@
+﻿operation_id,segment_count,total_duration_hours,mean_duration_hours,median_duration_hours,min_duration_hours,max_duration_hours
+OP_001,113,3711.0,32.84070796460177,32.333333333333336,24.0,59.5
+OP_002,148,5071.5,34.266891891891895,31.583333333333336,24.0,62.16666666666666

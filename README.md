@@ -1,11 +1,13 @@
-# WeatherDataset 高维时间序列自动分段实验
+# WeatherDataset 高维时间序列分段与工况聚类
 
 本项目使用 Apache IoTDB 和 Python 对 WeatherDataset 气象多变量时间序列进行存储、预处理和自动分段，并比较两种高维时间序列变点检测方法：
 
 1. 基于 `ruptures` 库的 PELT（Pruned Exact Linear Time）方法；
 2. 基于滑动窗口和对称 KL 散度（Kullback–Leibler Divergence）的方法。
 
-项目不仅提供最终分段程序，还保留了参数选择实验，便于复现实验过程、理解参数影响或重新选择参数。
+项目还实现了分段特征提取、K-Means/GMM 聚类、工况统计和二维 PCA 数据输出，并保留参数选择实验以便复现。
+
+当前数据流为：原始 CSV 由 `import_weather.py` 清洗后写入 IoTDB，`segmentation.py` 和 `feature_extraction.py` 再从同一设备读取数据。组员 B 的特征模块仅校验清洗结果，不再重复排序、去重或插值；分段模块保留组员 A 原有的防御性预处理。
 
 ## 1. 数据集
 
@@ -35,8 +37,15 @@
 │   └── weather.csv                 # WeatherDataset 原始数据
 ├── test_code4pelt/                 # PELT 参数实验代码与实验结果
 ├── test_code4window/               # 滑动窗口 KL 参数实验代码与实验结果
+├── tests/                           # 特征与聚类测试
+├── outputs/member_b/                # 组员 B 的输入快照和两套方法结果
+│   ├── inputs/                      # PELT 与滑动窗口 KL 分段表
+│   ├── pelt/                        # PELT 特征、聚类、统计和模型
+│   └── kl/                          # 滑动窗口 KL 特征、聚类、统计和模型
 ├── import_weather.py               # 将 Weather 数据导入 IoTDB
 ├── segmentation.py                 # 使用最终参数运行两种分段方法
+├── feature_extraction.py            # 从 IoTDB 读取数据并提取分段特征
+├── clustering.py                    # 聚类对比、模型选择和工况统计
 └── README.md
 ```
 
@@ -45,7 +54,9 @@
 - `test_code4pelt` 用于依次研究 PELT 的惩罚系数、最短分段长度和 `jump`；
 - `test_code4window` 用于研究滑动窗口长度和 KL 阈值系数；
 - `segmentation.py` 是最终使用文件，一次运行即可生成两种方法的分段表；
-- `import_weather.py` 用于完成 WeatherDataset 到 Apache IoTDB 的数据导入。
+- `import_weather.py` 用于清洗数据并写入 Apache IoTDB；
+- `feature_extraction.py` 读取 IoTDB 中的清洗数据，提取并标准化分段特征；
+- `clustering.py` 对比 K-Means 和 GMM，生成工况 ID、统计和可视化数据。
 
 ## 3. 实验流程
 
@@ -57,7 +68,9 @@
 4. 对 PELT 的惩罚系数、最短分段长度和搜索步长进行参数实验；
 5. 对滑动窗口 KL 方法的窗口长度和阈值系数进行参数实验；
 6. 使用 BIC、相邻参数稳定性、分段长度和两种方法的一致性综合选择参数；
-7. 使用最终参数生成两套分段结果。
+7. 使用最终参数生成两套分段结果；
+8. 按分段边界提取特征并标准化；
+9. 对比 K-Means 和 GMM，生成工况统计与二维 PCA 数据。
 
 本实验采用多维联合检测，即同时利用21个气象变量判断变点，而不是分别检测每个维度后再取并集。
 
@@ -172,7 +185,7 @@ source .venv/bin/activate
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install numpy pandas scipy scikit-learn ruptures apache-iotdb
+python -m pip install numpy pandas scipy scikit-learn ruptures apache-iotdb joblib
 ```
 
 ## 8. 快速使用最终分段程序
@@ -264,7 +277,68 @@ end_index_exclusive = 144
 
 表示该分段包含下标 `0` 至 `143`，总计144个采样点。
 
-## 10. 将数据导入 Apache IoTDB
+## 10. 分段特征提取与标准化
+
+先运行 `import_weather.py` 将清洗数据写入 IoTDB，再运行 `segmentation.py` 生成两套分段表。PELT 和滑动窗口 KL 使用同一套特征代码，但结果写入不同目录，避免相互覆盖：
+
+```powershell
+python .\feature_extraction.py `
+  --segments .\outputs\member_b\inputs\pelt_segments.csv `
+  --output-dir .\outputs\member_b\pelt
+
+python .\feature_extraction.py `
+  --segments .\outputs\member_b\inputs\kl_segments.csv `
+  --output-dir .\outputs\member_b\kl
+```
+
+`feature_extraction.py` 默认查询 `root.weather.station001`，查询时间范围和连接参数与 `segmentation.py` 一致。它只检查时间是否有序且唯一、数值是否有限、分段边界和时间戳是否匹配，不再清洗数据。
+
+如果已经由 A 导出了清洗后的 CSV，也可以使用备用模式：
+
+```powershell
+python .\feature_extraction.py `
+  --source csv `
+  --data .\cleaned_weather.csv `
+  --segments .\outputs\member_b\inputs\pelt_segments.csv `
+  --output-dir .\outputs\member_b\pelt
+```
+
+每个传感器提取统计、时域形状和趋势特征，同时提取分段内传感器两两相关系数。当前 21 个传感器共生成 567 个特征。分段元数据不参与 StandardScaler。
+
+输出文件：
+
+```text
+segment_features_raw.csv
+segment_features_scaled.csv
+feature_scaler.joblib
+```
+
+## 11. 聚类与工况识别
+
+```powershell
+python .\clustering.py `
+  --input .\outputs\member_b\pelt\segment_features_scaled.csv `
+  --output-dir .\outputs\member_b\pelt
+
+python .\clustering.py `
+  --input .\outputs\member_b\kl\segment_features_scaled.csv `
+  --output-dir .\outputs\member_b\kl
+```
+
+程序默认使用 PCA 保留 95% 方差，并比较 K-Means 和对角协方差 GMM 在 K=2～10 时的表现。两套分段结果如下：
+
+| 分段方法 | 分段数 | PCA 维度 | 最佳算法 | K | Silhouette | CH | DB |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| PELT | 267 | 64 | K-Means | 2 | 0.161670 | 57.520245 | 2.058445 |
+| 滑动窗口 KL | 261 | 63 | K-Means | 2 | 0.156124 | 54.901159 | 2.074103 |
+
+完整指标、分段标签、工况统计、二维坐标、聚类中心和模型分别位于 `outputs/member_b/pelt/` 和 `outputs/member_b/kl/`。测试命令：
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+## 12. 将数据导入 Apache IoTDB
 
 这一步用于复现实验中的数据库存储和查询过程。最终 `segmentation.py` 默认从
 IoTDB 查询并返回 `pandas.DataFrame`；没有安装 IoTDB 的同学仍可使用
@@ -303,7 +377,7 @@ SELECT * FROM root.weather.station001 LIMIT 10;
 
 如果其他同学的 CSV 路径、IoTDB 地址、用户名或密码不同，请先检查并修改 `import_weather.py` 开头的配置。
 
-## 11. 参数实验代码
+## 13. 参数实验代码
 
 最终复现只需要运行 `segmentation.py`。如果需要重新研究参数，可以查看：
 
@@ -327,7 +401,7 @@ PELT 参数实验主要包括：
 
 需要注意，BIC 越小通常表示拟合效果与模型复杂度之间的权衡越好，但不应仅依靠 BIC 机械选择参数。最短分段长度具有明确的业务含义，最终选择还应考虑分段长度是否合理、参数是否稳定以及变点是否具有可解释性。
 
-## 12. 常见问题
+## 14. 常见问题
 
 ### 找不到 `data/weather.csv`
 
@@ -384,6 +458,12 @@ PELT 需要处理52,695行、21维数据。最终脚本已经使用 `jump=6` 降
 - 缺失值没有被提前以其他方式处理；
 - 未修改 `segmentation.py` 中的最终参数。
 
-## 13. 说明
+### 无法连接 IoTDB
 
-本项目用于高维时间序列存储、变点检测与自动分段实验。两种方法产生的分段结果可继续用于分段特征提取、聚类、工况识别和可视化分析。
+确认 IoTDB 已启动并监听 `127.0.0.1:6667`，且导入、分段和特征提取使用同一设备路径。没有数据库环境时，只能使用各程序提供的 CSV 备用模式。
+
+在 UTC+8 环境中，当前 `segmentation.py` 的日期字面量查询可能少取末尾 8 小时；`feature_extraction.py` 已通过扩大查询范围后按毫秒时间轴精确裁剪来规避该问题。组员 A 后续重新生成分段时，需要统一导入时间戳与 SQL 查询的时区解释。
+
+## 15. 说明
+
+当前仓库已完成数据清洗与入库、IoTDB 查询、两种自动分段、分段特征提取、两种聚类算法对比、工况识别和可视化数据准备。最终图表和一键运行入口仍待整合。

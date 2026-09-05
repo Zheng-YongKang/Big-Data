@@ -1,0 +1,1 @@
+Highest silhouette was 0.161670. Results within 0.010000 were treated as very close (1 candidate(s)); among them, higher Calinski-Harabasz and then lower Davies-Bouldin were used as tie-breakers. Selected KMeans with K=2: silhouette=0.161670, CH=57.520245, DB=2.058445.
