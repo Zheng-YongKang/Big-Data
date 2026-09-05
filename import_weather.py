@@ -23,6 +23,10 @@ DEVICE = "root.weather.station001"
 
 BATCH_SIZE = 1000
 
+# True：先删除本次数据时间范围内的旧记录，再写入清洗后的数据。
+# 仅删除 DEVICE 下、当前 CSV 起止时间范围内的数据，不删除数据库结构。
+REPLACE_EXISTING_RANGE = True
+
 MAPPING_OUTPUT = Path("weather_column_mapping.csv")
 
 
@@ -325,6 +329,44 @@ def create_timestamps(df, time_column):
     )
 
 
+# ==================== 清除旧数据 ====================
+
+def delete_existing_data_in_range(session, df, time_column):
+    """
+    删除本次 CSV 时间范围内的旧记录，避免旧的 -9999 值或残留数据
+    与清洗后的数据混在一起。数据库、设备和时间序列结构均会保留。
+    """
+    if not REPLACE_EXISTING_RANGE:
+        print("跳过旧数据清除（REPLACE_EXISTING_RANGE=False）")
+        return
+
+    timestamps = create_timestamps(df, time_column)
+
+    if not timestamps:
+        raise ValueError("清洗后的数据为空，已停止删除和写入。")
+
+    start_timestamp = min(timestamps)
+    end_timestamp = max(timestamps)
+
+    print()
+    print("=" * 70)
+    print("4. 清除相同时间范围内的旧数据")
+    print("=" * 70)
+    print(f"设备：{DEVICE}")
+    print(
+        f"时间范围：{df[time_column].min()} "
+        f"至 {df[time_column].max()}"
+    )
+
+    sql = (
+        f"DELETE FROM {DEVICE}.** "
+        f"WHERE time >= {start_timestamp} AND time <= {end_timestamp}"
+    )
+    session.execute_non_query_statement(sql)
+
+    print("旧数据清除完成；数据库和时间序列结构已保留。")
+
+
 # ==================== 批量导入 ====================
 
 def insert_weather_data(
@@ -335,7 +377,7 @@ def insert_weather_data(
 ):
     print()
     print("=" * 70)
-    print("4. 批量写入 Weather 数据")
+    print("5. 批量写入清洗后的 Weather 数据")
     print("=" * 70)
 
     timestamps = create_timestamps(
@@ -421,6 +463,12 @@ def main():
         session = open_session()
 
         create_database(session)
+
+        delete_existing_data_in_range(
+            session,
+            df,
+            time_column
+        )
 
         insert_weather_data(
             session,

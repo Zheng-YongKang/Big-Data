@@ -183,8 +183,10 @@ python -m pip install numpy pandas scipy scikit-learn ruptures apache-iotdb
 python import_weather.py
 ```
 
-修正后的导入程序会在写入前处理重复时间戳和 `-9999` 哨兵值。它会使用
-清洗后的数值覆盖相同时间戳上的旧值，因此通常不需要删除原数据库。
+修正后的导入程序会先完成重复时间戳处理、`-9999` 哨兵值转换和插值校验，
+再删除 `root.weather.station001` 中本次 CSV 时间范围内的旧记录，最后写入
+清洗后的数据。该操作保留数据库结构、时间序列结构以及时间范围外的数据。
+清除旧记录后不要中断程序；如果意外中断，重新运行导入脚本即可。
 
 导入后的信息为：
 
