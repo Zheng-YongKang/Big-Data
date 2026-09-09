@@ -72,9 +72,9 @@ def parse_arguments():
 
 
 def format_iotdb_time(value):
-    """检查用户输入的时间，并转换为 IoTDB SQL 使用的时间格式。"""
+    """转换为与导入脚本一致的 Unix 毫秒，避免服务端时区解释日期字面量。"""
     timestamp = pd.to_datetime(value, errors="raise")
-    return timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+    return str(int(timestamp.value // 1_000_000))
 
 
 def query_weather_from_iotdb(

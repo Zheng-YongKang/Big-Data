@@ -7,6 +7,60 @@
 
 项目还实现了分段特征提取、K-Means/GMM 聚类、工况统计和二维 PCA 数据输出，并保留参数选择实验以便复现。
 
+## 0. 题目要求完成度
+
+| 题目要求 | 当前实现 | 状态 |
+| --- | --- | --- |
+| IoTDB 批量导入、时间范围查询并转 DataFrame | `import_weather.py`、`data_loader.py` | 已完成 |
+| 两种多维联合分段、最短长度与参数选择 | PELT、滑动窗口对称 KL，含参数实验 | 已完成 |
+| 至少四类特征及标准化 | 统计、时域形状、相关性、趋势，共 567 维 | 已完成 |
+| 两种聚类、指标选 K、工况 ID 和时长统计 | K-Means、GMM；Silhouette、CH、DB、AIC/BIC | 已完成 |
+| 四类规定可视化 | `visualization.py` 输出四张 PNG | 已完成 |
+| 一键完整流水线 | `main.py` | 已完成 |
+| `requirements.txt` 和运行说明 | 本文件及依赖清单 | 已完成 |
+| 8～15 页实验报告 PDF | 需根据最终运行图表和实验参数撰写 | 尚未提交 |
+
+除实验报告和现场验收材料外，题目要求的代码交付项已经齐全。
+
+## 一键运行
+
+安装依赖后，在项目根目录执行：
+
+```bash
+python -m pip install -r requirements.txt
+python main.py
+```
+
+默认直接读取仓库内的 `data/weather.csv`，依次运行两种分段方法、特征提取、聚类、工况标注和四类可视化，所有结果写入 `outputs/pipeline/`。若只需一种分段方法：
+
+```bash
+python main.py --method pelt
+python main.py --method kl
+```
+
+使用 IoTDB 作为数据源：
+
+```bash
+python main.py --source iotdb --host 127.0.0.1 --port 6667
+```
+
+每种分段方法均生成：
+
+```text
+segments.csv
+segment_features_raw.csv
+segment_features_scaled.csv
+clustering_metrics.csv
+segment_labels.csv
+operation_summary.csv
+pca_2d.csv
+cluster_centers_2d.csv
+figures/01_multichannel_segmentation.png
+figures/02_cluster_scatter.png
+figures/03_representative_segments.png
+figures/04_operation_timeline.png
+```
+
 当前数据流为：原始 CSV 由 `import_weather.py` 清洗后写入 IoTDB，`segmentation.py` 和 `feature_extraction.py` 再从同一设备读取数据。组员 B 的特征模块仅校验清洗结果，不再重复排序、去重或插值；分段模块保留组员 A 原有的防御性预处理。
 
 ## 1. 数据集
@@ -43,9 +97,13 @@
 │   ├── pelt/                        # PELT 特征、聚类、统计和模型
 │   └── kl/                          # 滑动窗口 KL 特征、聚类、统计和模型
 ├── import_weather.py               # 将 Weather 数据导入 IoTDB
+├── data_loader.py                  # CSV/IoTDB 统一读取、清洗及时区安全裁剪
 ├── segmentation.py                 # 使用最终参数运行两种分段方法
 ├── feature_extraction.py            # 从 IoTDB 读取数据并提取分段特征
 ├── clustering.py                    # 聚类对比、模型选择和工况统计
+├── visualization.py                 # 题目规定的四类可视化
+├── main.py                          # 端到端一键运行入口
+├── requirements.txt                 # 完整 Python 依赖
 └── README.md
 ```
 
@@ -185,7 +243,7 @@ source .venv/bin/activate
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install numpy pandas scipy scikit-learn ruptures apache-iotdb joblib
+python -m pip install -r requirements.txt
 ```
 
 ## 8. 快速使用最终分段程序
@@ -466,4 +524,4 @@ PELT 需要处理52,695行、21维数据。最终脚本已经使用 `jump=6` 降
 
 ## 15. 说明
 
-当前仓库已完成数据清洗与入库、IoTDB 查询、两种自动分段、分段特征提取、两种聚类算法对比、工况识别和可视化数据准备。最终图表和一键运行入口仍待整合。
+当前仓库已完成数据清洗与入库、IoTDB 查询、两种自动分段、分段特征提取、两种聚类算法对比、工况识别、四类最终图表和一键运行入口。代码交付项已经完整；提交前仍需结合最终输出整理 8～15 页实验报告 PDF，并准备验收演示。
