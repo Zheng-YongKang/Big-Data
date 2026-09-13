@@ -1,0 +1,22 @@
+﻿original_column,iotdb_measurement,iotdb_path
+p (mbar),p_mbar,root.weather.station001.p_mbar
+T (degC),T_degC,root.weather.station001.T_degC
+Tpot (K),Tpot_K,root.weather.station001.Tpot_K
+Tdew (degC),Tdew_degC,root.weather.station001.Tdew_degC
+rh (%),rh,root.weather.station001.rh
+VPmax (mbar),VPmax_mbar,root.weather.station001.VPmax_mbar
+VPact (mbar),VPact_mbar,root.weather.station001.VPact_mbar
+VPdef (mbar),VPdef_mbar,root.weather.station001.VPdef_mbar
+sh (g/kg),sh_g_kg,root.weather.station001.sh_g_kg
+H2OC (mmol/mol),H2OC_mmol_mol,root.weather.station001.H2OC_mmol_mol
+rho (g/m**3),rho_g_m_3,root.weather.station001.rho_g_m_3
+wv (m/s),wv_m_s,root.weather.station001.wv_m_s
+max. wv (m/s),max_wv_m_s,root.weather.station001.max_wv_m_s
+wd (deg),wd_deg,root.weather.station001.wd_deg
+rain (mm),rain_mm,root.weather.station001.rain_mm
+raining (s),raining_s,root.weather.station001.raining_s
+SWDR (W/m�),SWDR_W_m,root.weather.station001.SWDR_W_m
+PAR (�mol/m�/s),PAR_mol_m_s,root.weather.station001.PAR_mol_m_s
+max. PAR (�mol/m�/s),max_PAR_mol_m_s,root.weather.station001.max_PAR_mol_m_s
+Tlog (degC),Tlog_degC,root.weather.station001.Tlog_degC
+OT,OT,root.weather.station001.OT

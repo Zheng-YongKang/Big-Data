@@ -1,0 +1,55 @@
+﻿size,min_abs_r,features
+10,0.953208907031459,Tdew_degC__mean; Tdew_degC__median; Tdew_degC__q25; Tdew_degC__min; H2OC_mmol_mol__min; sh_g_kg__min; VPact_mbar__min; H2OC_mmol_mol__q25; sh_g_kg__q25; VPact_mbar__q25
+10,0.972304131622089,Tdew_degC__q75; H2OC_mmol_mol__mean; sh_g_kg__mean; VPact_mbar__mean; H2OC_mmol_mol__median; sh_g_kg__median; VPact_mbar__median; H2OC_mmol_mol__q75; sh_g_kg__q75; VPact_mbar__q75
+9,0.951903605231542,T_degC__mean; T_degC__median; Tpot_K__mean; Tpot_K__median; T_degC__q75; Tpot_K__q75; Tlog_degC__mean; Tlog_degC__median; Tlog_degC__q75
+5,0.958534170328078,VPmax_mbar__q25; T_degC__q25; Tpot_K__q25; Tlog_degC__min; Tlog_degC__q25
+4,0.988364160390523,Tdew_degC__skew; H2OC_mmol_mol__skew; sh_g_kg__skew; VPact_mbar__skew
+4,0.983423439349324,Tdew_degC__max; H2OC_mmol_mol__max; sh_g_kg__max; VPact_mbar__max
+4,0.950372053914616,Tdew_degC__kurtosis; H2OC_mmol_mol__kurtosis; sh_g_kg__kurtosis; VPact_mbar__kurtosis
+4,0.95512527561892,Tdew_degC__diff_mean; H2OC_mmol_mol__diff_mean; sh_g_kg__diff_mean; VPact_mbar__diff_mean
+4,0.982723554901998,SWDR_W_m__mean; PAR_mol_m_s__mean; SWDR_W_m__q75; PAR_mol_m_s__q75
+4,0.961379618423419,rho_g_m_3__mean; rho_g_m_3__median; rho_g_m_3__q25; rho_g_m_3__min
+4,0.974508664277907,max_wv_m_s__mean; max_wv_m_s__median; wv_m_s__mean; wv_m_s__median
+4,0.96026732357722,p_mbar__mean; p_mbar__median; p_mbar__q75; p_mbar__max
+4,0.959502960196662,VPmax_mbar__mean; VPmax_mbar__median; VPmax_mbar__max; VPmax_mbar__q75
+3,0.999544031156921,H2OC_mmol_mol__std; sh_g_kg__std; VPact_mbar__std
+3,0.999687919998683,H2OC_mmol_mol__slope; sh_g_kg__slope; VPact_mbar__slope
+3,0.955146995167832,H2OC_mmol_mol__zero_crossing_rate; sh_g_kg__zero_crossing_rate; VPact_mbar__zero_crossing_rate
+3,0.999870046116689,H2OC_mmol_mol__diff_std; sh_g_kg__diff_std; VPact_mbar__diff_std
+3,0.970957103398175,SWDR_W_m__q25; max_PAR_mol_m_s__q25; PAR_mol_m_s__q25
+3,0.960951085875765,SWDR_W_m__max; PAR_mol_m_s__max; max_PAR_mol_m_s__std
+3,0.952138378057491,SWDR_W_m__skew; PAR_mol_m_s__skew; max_PAR_mol_m_s__skew
+3,0.992380998978311,SWDR_W_m__median; PAR_mol_m_s__median; max_PAR_mol_m_s__median
+3,0.97901020479988,SWDR_W_m__slope; PAR_mol_m_s__slope; max_PAR_mol_m_s__slope
+3,0.951118950483331,rh__mean; rh__median; rh__q25
+3,0.958315544432611,VPdef_mbar__mean; VPdef_mbar__q75; VPdef_mbar__median
+3,0.984118004852699,T_degC__diff_std; Tpot_K__diff_std; rho_g_m_3__diff_std
+3,0.971928652760507,T_degC__max; Tpot_K__max; Tlog_degC__max
+3,0.958197005001065,VPmax_mbar__skew; T_degC__skew; Tpot_K__skew
+3,0.958499399545929,T_degC__std; Tpot_K__std; rho_g_m_3__std
+3,0.972418571998975,VPmax_mbar__min; T_degC__min; Tpot_K__min
+2,0.998810628540624,SWDR_W_m__std; PAR_mol_m_s__std
+2,0.999195191687425,SWDR_W_m__diff_mean; PAR_mol_m_s__diff_mean
+2,0.958652135732113,SWDR_W_m__zero_crossing_rate; PAR_mol_m_s__zero_crossing_rate
+2,0.995932283518319,SWDR_W_m__kurtosis; PAR_mol_m_s__kurtosis
+2,0.998670200606693,SWDR_W_m__diff_std; PAR_mol_m_s__diff_std
+2,0.984485764369871,max_PAR_mol_m_s__mean; max_PAR_mol_m_s__q75
+2,1,raining_s__q25; rain_mm__q25
+2,0.97594242829375,VPmax_mbar__diff_std; VPdef_mbar__diff_std
+2,0.961351700805178,T_degC__kurtosis; Tpot_K__kurtosis
+2,0.952548389935162,rain_mm__skew; rain_mm__kurtosis
+2,0.967987933828811,rain_mm__max; rain_mm__diff_std
+2,0.991587461596965,T_degC__slope; Tpot_K__slope
+2,0.994210225077937,T_degC__diff_mean; Tpot_K__diff_mean
+2,0.961144143833916,max_wv_m_s__std; wv_m_s__std
+2,0.977411273538995,VPdef_mbar__std; VPdef_mbar__max
+2,0.950940013698438,VPdef_mbar__skew; rh__skew
+2,0.965572683904781,VPdef_mbar__kurtosis; rh__kurtosis
+2,0.980159694561533,max_wv_m_s__q25; wv_m_s__q25
+2,0.953791128610226,max_wv_m_s__max; wv_m_s__max
+2,0.952329374154468,max_wv_m_s__min; wv_m_s__min
+2,0.96039604694528,max_wv_m_s__slope; wv_m_s__slope
+2,0.979098588845433,max_wv_m_s__q75; wv_m_s__q75
+2,0.985708586840843,p_mbar__min; p_mbar__q25
+2,0.965720080097596,p_mbar__slope; p_mbar__diff_mean
+2,0.980523136782142,rho_g_m_3__max; rho_g_m_3__q75
