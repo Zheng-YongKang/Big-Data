@@ -143,8 +143,9 @@ def plot_representative_segments(
     output: str | Path,
     representative_count: int = 3,
     sensor_count: int = 3,
+    times: pd.DatetimeIndex | None = None,
 ) -> None:
-    """每个工况选取靠近二维中心的 2–3 段，按相对进度叠加比较。"""
+    """用原始单位、日期图例、均值线和范围带展示各工况的代表片段。"""
     # 优先选择含义互补且易解释的温度、湿度、风速；列名不匹配时再按方差补齐。
     preferred_groups = [
         ("t (degc)", "t_degc"),
@@ -169,33 +170,86 @@ def plot_representative_segments(
     operations = list(representatives)
     fig, axes = plt.subplots(
         len(operations), len(sensors), squeeze=False,
-        figsize=(5.2 * len(sensors), max(4.0, 3.1 * len(operations))), sharex=True,
+        figsize=(5.4 * len(sensors), max(4.8, 3.8 * len(operations))), sharex=True,
     )
-    global_mean = values[sensors].mean()
-    global_std = values[sensors].std(ddof=0).replace(0, 1.0)
     target_x = np.linspace(0, 100, 120)
+    line_styles = ["-", "--", ":"]
 
     for row_index, operation in enumerate(operations):
         group = representatives[operation]
         color = COLORS[row_index % len(COLORS)]
         for column_index, sensor in enumerate(sensors):
             axis = axes[row_index, column_index]
-            for segment in group.itertuples(index=False):
+            normalized_segments: list[np.ndarray] = []
+            for segment_index, segment in enumerate(group.itertuples(index=False), start=1):
                 start, end = int(segment.start_index), int(segment.end_index_exclusive)
-                series = ((values[sensor].iloc[start:end] - global_mean[sensor]) / global_std[sensor]).to_numpy()
+                series = values[sensor].iloc[start:end].to_numpy(dtype=float)
                 old_x = np.linspace(0, 100, len(series))
-                axis.plot(target_x, np.interp(target_x, old_x, series), color=color, alpha=0.68, linewidth=1.05)
-            axis.axhline(0, color="#9CA3AF", linewidth=0.6)
+                normalized = np.interp(target_x, old_x, series)
+                normalized_segments.append(normalized)
+
+                if {"start_time", "end_time"}.issubset(group.columns):
+                    start_time = pd.to_datetime(segment.start_time)
+                    end_time = pd.to_datetime(segment.end_time)
+                elif times is not None:
+                    start_time = pd.Timestamp(times[start])
+                    end_time = pd.Timestamp(times[min(end - 1, len(times) - 1)])
+                else:
+                    start_time = end_time = None
+                if start_time is not None:
+                    date_label = f"片段 {segment_index}：{start_time:%m-%d}～{end_time:%m-%d}"
+                else:
+                    date_label = f"代表片段 {segment_index}"
+
+                axis.plot(
+                    target_x,
+                    normalized,
+                    color=color,
+                    alpha=0.58,
+                    linewidth=1.15,
+                    linestyle=line_styles[(segment_index - 1) % len(line_styles)],
+                    label=date_label if column_index == 0 else "_nolegend_",
+                )
+
+            stacked = np.vstack(normalized_segments)
+            mean_curve = stacked.mean(axis=0)
+            axis.fill_between(
+                target_x,
+                stacked.min(axis=0),
+                stacked.max(axis=0),
+                color=color,
+                alpha=0.10,
+                linewidth=0,
+                label="代表片段范围" if column_index == 0 else "_nolegend_",
+            )
+            axis.plot(
+                target_x,
+                mean_curve,
+                color=color,
+                linewidth=3.0,
+                label="平均走势" if column_index == 0 else "_nolegend_",
+            )
             axis.grid(color="#E5E7EB", linewidth=0.55)
             axis.spines[["top", "right"]].set_visible(False)
             if row_index == 0:
-                axis.set_title(_short_name(sensor), fontsize=10, weight="bold")
+                axis.set_title(_short_name(sensor), fontsize=11, weight="bold")
             if column_index == 0:
-                axis.set_ylabel(f"{operation}\n标准化值", fontsize=9)
+                axis.set_ylabel(f"{operation}\n原始测量值", fontsize=10, weight="bold", color=color)
+                axis.legend(loc="best", frameon=True, framealpha=0.92, fontsize=8)
             if row_index == len(operations) - 1:
-                axis.set_xlabel("片段相对进度（%）")
-    fig.suptitle("各工况代表性时序片段对比", x=0.04, ha="left", fontsize=15, weight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
+                axis.set_xlabel("片段内部进度")
+            axis.set_xticks([0, 50, 100], ["开始\n0%", "中段\n50%", "结束\n100%"])
+    fig.suptitle("各工况的典型片段长什么样？", x=0.04, ha="left", fontsize=16, weight="bold")
+    fig.text(
+        0.04,
+        0.94,
+        "每行是一种工况；细线是 3 个真实日期片段，粗线是平均走势，浅色区域是它们的变化范围。纵轴保留原始单位。",
+        ha="left",
+        va="top",
+        fontsize=10,
+        color="#4B5563",
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.90))
     fig.savefig(output, dpi=170, bbox_inches="tight")
     plt.close(fig)
 
@@ -250,7 +304,7 @@ def generate_all_visualizations(
     ]
     plot_multichannel_segments(times, values, segments, outputs[0], max_channels=max_channels)
     plot_cluster_scatter(points, centers, outputs[1])
-    plot_representative_segments(values, points, outputs[2])
+    plot_representative_segments(values, points, outputs[2], times=times)
     plot_operation_timeline(labels, outputs[3])
     return outputs
 
